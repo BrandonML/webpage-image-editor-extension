@@ -26,6 +26,32 @@
           <h2 id="discoveryTitle">Discovery Grid</h2>
           <span id="imageCount" class="count-pill">0 images</span>
         </div>
+
+        <section class="filter-panel" aria-label="Discovery filters">
+          <div class="dimension-filters">
+            <label class="filter-field">
+              <span>Min W</span>
+              <input id="minWidth" type="number" min="0" inputmode="numeric" placeholder="0">
+            </label>
+            <label class="filter-field">
+              <span>Max W</span>
+              <input id="maxWidth" type="number" min="0" inputmode="numeric" placeholder="Any">
+            </label>
+            <label class="filter-field">
+              <span>Min H</span>
+              <input id="minHeight" type="number" min="0" inputmode="numeric" placeholder="0">
+            </label>
+            <label class="filter-field">
+              <span>Max H</span>
+              <input id="maxHeight" type="number" min="0" inputmode="numeric" placeholder="Any">
+            </label>
+          </div>
+          <div class="file-type-filter-group">
+            <span class="filter-label">File Types</span>
+            <div id="fileTypeFilters" class="file-type-filters" aria-live="polite"></div>
+          </div>
+        </section>
+
         <div id="imageGrid" class="image-grid" aria-live="polite"></div>
       </section>
 

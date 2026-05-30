@@ -3,15 +3,45 @@
 
 const CONTEXT_MENU_ID = 'processImage';
 const PANEL_OPEN_DELAY_MS = 500;
+const SIDEBAR_PATH = 'sidebar.html';
 
 /**
- * Configure Chrome so the toolbar action opens the side panel.
- * This is intentionally fire-and-forget: older Chrome builds may reject the promise,
- * but current MV3 side panel implementations support this behavior.
+ * Enable and open the side panel for only the tab that initiated the action.
+ *
+ * The per-tab options must finish registering before open() is called; otherwise
+ * Chrome can report that there is no active side panel for the window.
+ *
+ * @param {chrome.tabs.Tab} tab
+ * @param {string} source
+ * @returns {Promise<boolean>}
  */
-chrome.sidePanel
-  .setPanelBehavior({ openPanelOnActionClick: true })
-  .catch((error) => console.warn('Unable to set side panel behavior:', error));
+const openPanelForTab = async (tab, source) => {
+  if (typeof tab?.id !== 'number' || typeof tab?.windowId !== 'number') {
+    console.error(`Unable to open side panel for ${source}: no active tab available.`);
+    return false;
+  }
+
+  try {
+    chrome.sidePanel.setOptions({
+      tabId: tab.id,
+      path: SIDEBAR_PATH,
+      enabled: true
+    });
+
+    await chrome.sidePanel.open({ tabId: tab.id });
+    return true;
+  } catch (error) {
+    console.error(`Unable to open side panel for ${source}:`, error);
+    return false;
+  }
+};
+
+/**
+ * Toolbar clicks should enable the side panel only for the clicked tab.
+ */
+chrome.action.onClicked.addListener((tab) => {
+  openPanelForTab(tab, 'action click');
+});
 
 /**
  * Create a single image context menu item when the extension is installed/updated.
@@ -32,13 +62,15 @@ chrome.runtime.onInstalled.addListener(() => {
 /**
  * Open the side panel from an image context menu click and forward the clicked image URL.
  */
-chrome.contextMenus.onClicked.addListener(async (info, tab) => {
-  if (info.menuItemId !== CONTEXT_MENU_ID || !info.srcUrl || !tab?.windowId) {
+chrome.contextMenus.onClicked.addListener((info, tab) => {
+  if (info.menuItemId !== CONTEXT_MENU_ID || !info.srcUrl) {
     return;
   }
 
-  try {
-    await chrome.sidePanel.open({ windowId: tab.windowId });
+  openPanelForTab(tab, 'context image').then((opened) => {
+    if (!opened) {
+      return;
+    }
 
     // Give the side panel document time to initialize its runtime message listener.
     setTimeout(() => {
@@ -47,9 +79,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
         url: info.srcUrl
       });
     }, PANEL_OPEN_DELAY_MS);
-  } catch (error) {
-    console.error('Unable to open side panel for context image:', error);
-  }
+  });
 });
 
 /**
