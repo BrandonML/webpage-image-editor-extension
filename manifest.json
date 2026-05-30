@@ -21,6 +21,7 @@
   "permissions": [
     "activeTab",
     "contextMenus",
+    "scripting",
     "sidePanel"
   ],
   "background": {

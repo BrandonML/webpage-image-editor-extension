@@ -1,6 +1,9 @@
 // Image Workflow Companion - side panel SPA.
 // Owns discovery, image ingest, Cropper.js lifecycle, compression options, and downloads.
 
+const SCAN_BLOCKED_URL_PATTERN = /^(chrome|chrome-extension|edge|about|devtools):/i;
+const RECEIVING_END_ERROR = 'Receiving end does not exist';
+
 const state = {
   cropper: null,
   currentUrl: '',
@@ -73,21 +76,69 @@ const getActiveTab = async () => {
 };
 
 /**
- * Ask the registered content script in the active tab to harvest image URLs.
- * The manifest already injects content.js at document_end, so no scripting permission is required.
+ * Determine whether the extension can inject and message a normal webpage tab.
+ *
+ * @param {chrome.tabs.Tab} tab
+ * @returns {boolean}
+ */
+const canScanTab = (tab) => Boolean(tab?.url) && !SCAN_BLOCKED_URL_PATTERN.test(tab.url);
+
+/**
+ * Send the scan request to the target tab's content script.
+ *
+ * @param {number} tabId
+ * @returns {Promise<{ok: boolean, images?: {url: string, width: number, height: number, aspectRatio: number, fileType: string}[], error?: string}>}
+ */
+const requestDomScan = (tabId) => chromeCall((callback) => {
+  chrome.tabs.sendMessage(tabId, { action: 'SCAN_DOM' }, callback);
+});
+
+/**
+ * Inject the current content script into the active tab when the manifest-injected
+ * script is unavailable, such as after an extension reload on an already-open tab.
+ *
+ * @param {number} tabId
+ * @returns {Promise<void>}
+ */
+const injectContentScript = async (tabId) => {
+  await chromeCall((callback) => {
+    chrome.scripting.executeScript({
+      target: { tabId },
+      files: ['content.js']
+    }, callback);
+  });
+};
+
+/**
+ * Ask the content script in the active tab to harvest image URLs, injecting it on
+ * demand if the page does not currently have a receiver for extension messages.
  *
  * @returns {Promise<{url: string, width: number, height: number, aspectRatio: number, fileType: string}[]>}
  */
 const scanActiveTab = async () => {
   const tab = await getActiveTab();
 
-  if (!tab?.id) {
+  if (typeof tab?.id !== 'number') {
     throw new Error('No active tab found.');
   }
 
-  const response = await chromeCall((callback) => {
-    chrome.tabs.sendMessage(tab.id, { action: 'SCAN_DOM' }, callback);
-  });
+  if (!canScanTab(tab)) {
+    throw new Error('This page cannot be scanned by Chrome extensions. Open a regular webpage and try again.');
+  }
+
+  let response;
+
+  try {
+    response = await requestDomScan(tab.id);
+  } catch (error) {
+    if (!error.message?.includes(RECEIVING_END_ERROR)) {
+      throw error;
+    }
+
+    setStatus('Preparing this page for scanning…');
+    await injectContentScript(tab.id);
+    response = await requestDomScan(tab.id);
+  }
 
   if (!response?.ok) {
     throw new Error(response?.error || 'Unable to scan the current page.');
