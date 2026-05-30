@@ -8,32 +8,32 @@ const SIDEBAR_PATH = 'sidebar.html';
 /**
  * Enable and open the side panel for only the tab that initiated the action.
  *
- * chrome.sidePanel.open() must be called during the original user gesture, so this
- * intentionally starts setOptions without awaiting it before opening the panel.
+ * The per-tab options must finish registering before open() is called; otherwise
+ * Chrome can report that there is no active side panel for the window.
  *
  * @param {chrome.tabs.Tab} tab
  * @param {string} source
- * @returns {boolean}
+ * @returns {Promise<boolean>}
  */
-const openPanelForTab = (tab, source) => {
+const openPanelForTab = async (tab, source) => {
   if (typeof tab?.id !== 'number' || typeof tab?.windowId !== 'number') {
     console.error(`Unable to open side panel for ${source}: no active tab available.`);
     return false;
   }
 
-  chrome.sidePanel.setOptions({
-    tabId: tab.id,
-    path: SIDEBAR_PATH,
-    enabled: true
-  }).catch((error) => {
-    console.error(`Unable to enable side panel for ${source}:`, error);
-  });
+  try {
+    await chrome.sidePanel.setOptions({
+      tabId: tab.id,
+      path: SIDEBAR_PATH,
+      enabled: true
+    });
 
-  chrome.sidePanel.open({ windowId: tab.windowId }).catch((error) => {
+    await chrome.sidePanel.open({ windowId: tab.windowId });
+    return true;
+  } catch (error) {
     console.error(`Unable to open side panel for ${source}:`, error);
-  });
-
-  return true;
+    return false;
+  }
 };
 
 /**
@@ -67,17 +67,19 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
     return;
   }
 
-  if (!openPanelForTab(tab, 'context image')) {
-    return;
-  }
+  openPanelForTab(tab, 'context image').then((opened) => {
+    if (!opened) {
+      return;
+    }
 
-  // Give the side panel document time to initialize its runtime message listener.
-  setTimeout(() => {
-    chrome.runtime.sendMessage({
-      action: 'CONTEXT_IMAGE_TARGET',
-      url: info.srcUrl
-    });
-  }, PANEL_OPEN_DELAY_MS);
+    // Give the side panel document time to initialize its runtime message listener.
+    setTimeout(() => {
+      chrome.runtime.sendMessage({
+        action: 'CONTEXT_IMAGE_TARGET',
+        url: info.srcUrl
+      });
+    }, PANEL_OPEN_DELAY_MS);
+  });
 });
 
 /**
