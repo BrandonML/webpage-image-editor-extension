@@ -23,7 +23,12 @@ const elements = {
   qualityValue: document.querySelector('#qualityValue'),
   convertPngCheckbox: document.querySelector('#convertPngCheckbox'),
   pngBadge: document.querySelector('#pngBadge'),
-  downloadButton: document.querySelector('#downloadButton')
+  downloadButton: document.querySelector('#downloadButton'),
+  minWidth: document.querySelector('#minWidth'),
+  maxWidth: document.querySelector('#maxWidth'),
+  minHeight: document.querySelector('#minHeight'),
+  maxHeight: document.querySelector('#maxHeight'),
+  fileTypeFilters: document.querySelector('#fileTypeFilters')
 };
 
 /**
@@ -71,7 +76,7 @@ const getActiveTab = async () => {
  * Ask the registered content script in the active tab to harvest image URLs.
  * The manifest already injects content.js at document_end, so no scripting permission is required.
  *
- * @returns {Promise<string[]>}
+ * @returns {Promise<{url: string, width: number, height: number, aspectRatio: number, fileType: string}[]>}
  */
 const scanActiveTab = async () => {
   const tab = await getActiveTab();
@@ -92,38 +97,177 @@ const scanActiveTab = async () => {
 };
 
 /**
- * Render the discovery grid with safe, clickable thumbnail buttons.
+ * Normalize image metadata for new content-script results and older string-only payloads.
  *
- * @param {string[]} urls
+ * @param {string|{url: string, width?: number, height?: number, aspectRatio?: number, fileType?: string}} image
+ * @returns {{url: string, width: number, height: number, aspectRatio: number, fileType: string}}
  */
-const renderDiscoveryGrid = (urls) => {
-  elements.imageGrid.textContent = '';
-  elements.imageCount.textContent = `${urls.length} image${urls.length === 1 ? '' : 's'}`;
+const normalizeImageMetadata = (image) => {
+  if (typeof image === 'string') {
+    return {
+      url: image,
+      width: 0,
+      height: 0,
+      aspectRatio: 0,
+      fileType: getExtensionFromUrl(image) || 'unknown'
+    };
+  }
 
-  if (!urls.length) {
+  const width = Number(image.width) || 0;
+  const height = Number(image.height) || 0;
+  const aspectRatio = Number(image.aspectRatio) || (width && height ? Math.round((width / height) * 100) / 100 : 0);
+
+  return {
+    url: image.url,
+    width,
+    height,
+    aspectRatio,
+    fileType: image.fileType || getExtensionFromUrl(image.url) || 'unknown'
+  };
+};
+
+/**
+ * Read an optional numeric filter value.
+ *
+ * @param {HTMLInputElement} input
+ * @returns {number|null}
+ */
+const readNumberFilter = (input) => {
+  const value = Number(input.value);
+  return Number.isFinite(value) && input.value !== '' ? value : null;
+};
+
+/**
+ * Build dynamic file-type checkboxes from discovered image metadata.
+ */
+const renderFileTypeFilters = () => {
+  elements.fileTypeFilters.textContent = '';
+
+  const fileTypes = [...new Set(state.discoveredImages.map((image) => image.fileType || 'unknown'))]
+    .sort((a, b) => a.localeCompare(b));
+
+  if (!fileTypes.length) {
+    const empty = document.createElement('span');
+    empty.className = 'empty-filter-state';
+    empty.textContent = 'No file types found.';
+    elements.fileTypeFilters.append(empty);
+    return;
+  }
+
+  const fragment = document.createDocumentFragment();
+
+  fileTypes.forEach((fileType) => {
+    const label = document.createElement('label');
+    label.className = 'file-type-option';
+
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.value = fileType;
+    checkbox.checked = true;
+    checkbox.addEventListener('change', applyDiscoveryFilters);
+
+    const text = document.createElement('span');
+    text.textContent = fileType.toUpperCase();
+
+    label.append(checkbox, text);
+    fragment.append(label);
+  });
+
+  elements.fileTypeFilters.append(fragment);
+};
+
+/**
+ * Return the checked file types from the dynamic filter group.
+ *
+ * @returns {Set<string>}
+ */
+const getSelectedFileTypes = () => new Set(
+  [...elements.fileTypeFilters.querySelectorAll('input[type="checkbox"]:checked')]
+    .map((checkbox) => checkbox.value)
+);
+
+/**
+ * Filter the full discovery result set using dimension inputs and checked file types.
+ *
+ * @returns {{url: string, width: number, height: number, aspectRatio: number, fileType: string}[]}
+ */
+const getFilteredImages = () => {
+  const minWidth = readNumberFilter(elements.minWidth);
+  const maxWidth = readNumberFilter(elements.maxWidth);
+  const minHeight = readNumberFilter(elements.minHeight);
+  const maxHeight = readNumberFilter(elements.maxHeight);
+  const selectedFileTypes = getSelectedFileTypes();
+
+  return state.discoveredImages.filter((image) => {
+    const width = image.width || 0;
+    const height = image.height || 0;
+
+    return selectedFileTypes.has(image.fileType)
+      && (minWidth === null || width >= minWidth)
+      && (maxWidth === null || width <= maxWidth)
+      && (minHeight === null || height >= minHeight)
+      && (maxHeight === null || height <= maxHeight);
+  });
+};
+
+/**
+ * Apply active discovery filters and redraw the grid.
+ */
+const applyDiscoveryFilters = () => {
+  renderDiscoveryGrid(getFilteredImages());
+};
+
+/**
+ * Render the discovery grid with safe, clickable thumbnail buttons and metadata badges.
+ *
+ * @param {{url: string, width: number, height: number, aspectRatio: number, fileType: string}[]} images
+ */
+const renderDiscoveryGrid = (images) => {
+  elements.imageGrid.textContent = '';
+  elements.imageCount.textContent = `${images.length} image${images.length === 1 ? '' : 's'}`;
+
+  if (!images.length) {
     const emptyState = document.createElement('p');
     emptyState.className = 'empty-state';
-    emptyState.textContent = 'No eligible images found. Try another page or right-click an image.';
+    emptyState.textContent = state.discoveredImages.length
+      ? 'No images match the active filters.'
+      : 'No eligible images found. Try another page or right-click an image.';
     elements.imageGrid.append(emptyState);
     return;
   }
 
   const fragment = document.createDocumentFragment();
 
-  urls.forEach((url) => {
+  images.forEach((imageData) => {
     const button = document.createElement('button');
     button.className = 'image-tile';
     button.type = 'button';
-    button.title = url;
-    button.addEventListener('click', () => loadImageIntoWorkspace(url));
+    button.title = imageData.url;
+    button.addEventListener('click', () => loadImageIntoWorkspace(imageData.url));
 
     const image = document.createElement('img');
-    image.src = url;
+    image.src = imageData.url;
     image.alt = 'Discovered webpage image';
     image.loading = 'lazy';
     image.referrerPolicy = 'no-referrer';
 
-    button.append(image);
+    const metadata = document.createElement('div');
+    metadata.className = 'image-metadata';
+
+    const badges = [
+      { text: imageData.fileType.toUpperCase(), className: 'file-type' },
+      { text: imageData.width && imageData.height ? `${imageData.width}×${imageData.height}` : 'Size unknown' },
+      { text: imageData.aspectRatio ? `${imageData.aspectRatio}:1` : 'Ratio unknown' }
+    ];
+
+    badges.forEach((badge) => {
+      const badgeElement = document.createElement('span');
+      badgeElement.className = `metadata-badge ${badge.className || ''}`.trim();
+      badgeElement.textContent = badge.text;
+      metadata.append(badgeElement);
+    });
+
+    button.append(image, metadata);
     fragment.append(button);
   });
 
@@ -180,8 +324,9 @@ const inferMimeType = (url, dataUrl, contentType) => {
  */
 const getExtensionFromUrl = (url) => {
   try {
-    const pathname = new URL(url).pathname;
-    return pathname.split('.').pop()?.toLowerCase() || '';
+    const fileName = new URL(url).pathname.split('/').pop() || '';
+    const extensionMatch = fileName.match(/\.([a-z0-9]+)$/i);
+    return extensionMatch?.[1]?.toLowerCase() || '';
   } catch (_error) {
     return '';
   }
@@ -417,11 +562,16 @@ const scanAndRender = async () => {
     setStatus('Scanning the active page for images…');
     showView('discovery');
 
-    state.discoveredImages = await scanActiveTab();
-    renderDiscoveryGrid(state.discoveredImages);
+    state.discoveredImages = (await scanActiveTab())
+      .map(normalizeImageMetadata)
+      .filter((image) => image.url);
+    renderFileTypeFilters();
+    applyDiscoveryFilters();
     setStatus(`Found ${state.discoveredImages.length} eligible image${state.discoveredImages.length === 1 ? '' : 's'}.`);
   } catch (error) {
     console.error('Page scan failed:', error);
+    state.discoveredImages = [];
+    renderFileTypeFilters();
     renderDiscoveryGrid([]);
     setStatus(`${error.message} Refresh the page and try again.`);
   } finally {
@@ -448,6 +598,8 @@ elements.presetSelect.addEventListener('change', applyPreset);
 elements.qualitySlider.addEventListener('input', updateCompressionControls);
 elements.convertPngCheckbox.addEventListener('change', updateCompressionControls);
 elements.downloadButton.addEventListener('click', downloadCurrentCrop);
+[elements.minWidth, elements.maxWidth, elements.minHeight, elements.maxHeight]
+  .forEach((input) => input.addEventListener('input', applyDiscoveryFilters));
 
 // Initial boot: registered content script should already be available on normal web pages.
 document.addEventListener('DOMContentLoaded', scanAndRender);
