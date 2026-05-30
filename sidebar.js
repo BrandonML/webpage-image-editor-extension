@@ -1,7 +1,7 @@
 // Image Workflow Companion - side panel SPA.
 // Owns discovery, image ingest, Cropper.js lifecycle, compression options, and downloads.
 
-const SCAN_BLOCKED_URL_PATTERN = /^(chrome|chrome-extension|edge|about|devtools):/i;
+const SCAN_BLOCKED_URL_PATTERN = /^(chrome|chrome-extension|edge|about|devtools):|^https:\/\/chromewebstore\.google\.com\//i;
 const RECEIVING_END_ERROR = 'Receiving end does not exist';
 
 const state = {
@@ -78,10 +78,14 @@ const getActiveTab = async () => {
 /**
  * Determine whether the extension can inject and message a normal webpage tab.
  *
+ * Chrome may omit tab.url when the extension only has an activeTab grant, so an
+ * absent URL should not be treated as restricted. If Chrome exposes a URL, block
+ * known privileged browser pages before attempting content-script messaging.
+ *
  * @param {chrome.tabs.Tab} tab
  * @returns {boolean}
  */
-const canScanTab = (tab) => Boolean(tab?.url) && !SCAN_BLOCKED_URL_PATTERN.test(tab.url);
+const canScanTab = (tab) => !tab?.url || !SCAN_BLOCKED_URL_PATTERN.test(tab.url);
 
 /**
  * Send the scan request to the target tab's content script.
