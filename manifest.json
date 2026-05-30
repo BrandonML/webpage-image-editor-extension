@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "Image Workflow Companion",
+  "version": "1.0.0",
+  "description": "Streamline image resizing, cropping, and compression directly from your sidebar.",
+  "permissions": [
+    "activeTab",
+    "contextMenus",
+    "sidePanel"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "side_panel": {
+    "default_path": "sidebar.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_end"
+    }
+  ]
+}
