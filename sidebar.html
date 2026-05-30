@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Image Workflow Companion</title>
+    <link rel="stylesheet" href="libs/cropper.min.css">
+    <link rel="stylesheet" href="sidebar.css">
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="app-header">
+        <div>
+          <p class="eyebrow">Image Workflow Companion</p>
+          <h1>Resize, crop, compress.</h1>
+        </div>
+        <button id="scanButton" class="ghost-button" type="button">Scan Page</button>
+      </header>
+
+      <section id="statusBanner" class="status-banner" role="status" aria-live="polite">
+        Ready to scan this page for images.
+      </section>
+
+      <section id="discoveryView" class="view discovery-view" aria-labelledby="discoveryTitle">
+        <div class="section-heading">
+          <h2 id="discoveryTitle">Discovery Grid</h2>
+          <span id="imageCount" class="count-pill">0 images</span>
+        </div>
+        <div id="imageGrid" class="image-grid" aria-live="polite"></div>
+      </section>
+
+      <section id="workspaceView" class="view workspace-view hidden" aria-labelledby="workspaceTitle">
+        <div class="workspace-toolbar">
+          <button id="backButton" class="ghost-button" type="button">← Grid</button>
+          <h2 id="workspaceTitle">Workspace</h2>
+        </div>
+
+        <div class="cropper-card">
+          <img id="cropperImage" alt="Selected image for cropping">
+        </div>
+
+        <form class="controls" aria-label="Image export controls">
+          <label class="field">
+            <span>Presets</span>
+            <select id="presetSelect">
+              <option value="1">Rebels Rescue (1:1)</option>
+              <option value="1.3333333333">4:3</option>
+              <option value="1.7777777778">16:9</option>
+              <option value="free">Freeform</option>
+            </select>
+          </label>
+
+          <label class="field">
+            <span>Compression Quality <strong id="qualityValue">85%</strong></span>
+            <input id="qualitySlider" type="range" min="10" max="100" value="85" step="1">
+          </label>
+
+          <label class="checkbox-field">
+            <input id="convertPngCheckbox" type="checkbox">
+            <span>Convert PNG to JPEG to enable compression</span>
+          </label>
+
+          <span id="pngBadge" class="badge hidden">Compression disabled for PNG</span>
+
+          <button id="downloadButton" class="primary-button" type="button">Download</button>
+        </form>
+      </section>
+    </main>
+
+    <script src="libs/cropper.min.js"></script>
+    <script src="sidebar.js"></script>
+  </body>
+</html>
