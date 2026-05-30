@@ -22,7 +22,7 @@ const openPanelForTab = async (tab, source) => {
   }
 
   try {
-    await chrome.sidePanel.setOptions({
+    chrome.sidePanel.setOptions({
       tabId: tab.id,
       path: SIDEBAR_PATH,
       enabled: true
