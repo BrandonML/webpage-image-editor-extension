@@ -28,7 +28,7 @@ const openPanelForTab = async (tab, source) => {
       enabled: true
     });
 
-    await chrome.sidePanel.open({ windowId: tab.windowId });
+    await chrome.sidePanel.open({ tabId: tab.id });
     return true;
   } catch (error) {
     console.error(`Unable to open side panel for ${source}:`, error);

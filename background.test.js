@@ -70,7 +70,7 @@ describe('background.js', () => {
     });
 
     // open should be called
-    expect(openMock).toHaveBeenCalledWith({ windowId: 456 });
+    expect(openMock).toHaveBeenCalledWith({ tabId: 123 });
 
     // Verify it doesn't return a rejected promise
     // It is important that setOptions is called *without* await
@@ -113,7 +113,7 @@ describe('background.js', () => {
       enabled: true,
     });
 
-    expect(openMock).toHaveBeenCalledWith({ windowId: 101 });
+    expect(openMock).toHaveBeenCalledWith({ tabId: 789 });
 
     // Fast-forward the setTimeout
     jest.runAllTimers();
