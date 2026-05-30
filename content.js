@@ -34,7 +34,7 @@ const toAbsoluteUrl = (candidate) => {
  * @param {string} srcset
  * @returns {string[]}
  */
-const parseSrcset = (srcset = '') => srcset
+const parseSrcset = (srcset) => String(srcset || '')
   .split(',')
   .map((entry) => entry.trim().split(/\s+/)[0])
   .filter(Boolean);
