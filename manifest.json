@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Image Workflow Companion",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Streamline image resizing, cropping, and compression directly from your sidebar.",
   "icons": {
     "16": "images/icons/icon-16.png",

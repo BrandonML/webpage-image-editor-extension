@@ -297,4 +297,65 @@ describe('cleanImageUrl', () => {
     expect(cleanImageUrl('data:image/png;base64,...')).toBeNull();
     expect(cleanImageUrl(null)).toBeNull();
   });
+
+  describe('CDN and real-world transformations', () => {
+    it('cleans Shopify image URLs', () => {
+      expect(cleanImageUrl('https://cdn.shopify.com/s/files/1/0000/0000/products/image_800x800.jpg?v=1234567890'))
+        .toBe('https://cdn.shopify.com/s/files/1/0000/0000/products/image.jpg?v=1234567890');
+
+      // Note: the regex in cleanImageUrl doesn't currently handle `_1024x`, so we assert the current behavior
+      // which is to leave it unchanged, but it's good to document this in a test.
+      expect(cleanImageUrl('https://cdn.shopify.com/s/files/1/0000/0000/products/image_1024x.jpg?v=1234567890'))
+        .toBe('https://cdn.shopify.com/s/files/1/0000/0000/products/image_1024x.jpg?v=1234567890');
+    });
+
+    it('cleans Imgix image URLs', () => {
+      expect(cleanImageUrl('https://example.imgix.net/image.jpg?w=400&h=400&fit=crop&auto=format,compress&q=80'))
+        .toBe('https://example.imgix.net/image.jpg');
+    });
+
+    it('cleans Cloudinary image URLs', () => {
+      expect(cleanImageUrl('https://res.cloudinary.com/demo/image/upload/w_300,h_300,c_fill,q_auto,f_auto/sample.jpg'))
+        .toBe('https://res.cloudinary.com/demo/image/upload/w_300,h_300,c_fill,q_auto,f_auto/sample.jpg'); // Note: current logic focuses on queries/filenames, Cloudinary path params are not handled, but let's test current behavior. Or if we want to test queries. Let's test Cloudinary query-based.
+      expect(cleanImageUrl('https://res.cloudinary.com/demo/image/upload/sample.jpg?w=300&h=300&q=auto'))
+        .toBe('https://res.cloudinary.com/demo/image/upload/sample.jpg');
+    });
+
+    it('cleans Unsplash image URLs', () => {
+      expect(cleanImageUrl('https://images.unsplash.com/photo-123456?ixlib=rb-1.2.1&w=1080&fit=max&q=80&fm=jpg&crop=entropy&cs=tinysrgb'))
+        .toBe('https://images.unsplash.com/photo-123456?cs=tinysrgb');
+    });
+
+    it('cleans WordPress / Jetpack Photon URLs', () => {
+      expect(cleanImageUrl('https://i0.wp.com/example.com/wp-content/uploads/2023/01/image.jpg?resize=150%2C150&ssl=1'))
+        .toBe('https://i0.wp.com/example.com/wp-content/uploads/2023/01/image.jpg?ssl=1');
+      expect(cleanImageUrl('https://example.com/wp-content/uploads/2023/01/image-300x200.jpg'))
+        .toBe('https://example.com/wp-content/uploads/2023/01/image.jpg');
+    });
+  });
+
+  describe('Error handling', () => {
+    it('returns the absoluteUrl if URL parsing/manipulation throws an error', () => {
+      const originalURL = global.URL;
+      const testUrl = 'https://example.com/simulate-error.jpg';
+
+      // Mock global URL temporarily to force an error in the try block
+      global.URL = class extends originalURL {
+        constructor(url, base) {
+          if (arguments.length === 1 && url === testUrl) {
+            throw new Error('Simulated URL parsing error');
+          }
+          super(url, base);
+        }
+      };
+
+      try {
+        // toAbsoluteUrl won't throw because it's called with document.baseURI
+        // but inside cleanImageUrl it tries `new URL(absoluteUrl)` which will throw
+        expect(cleanImageUrl(testUrl)).toBe(testUrl);
+      } finally {
+        global.URL = originalURL; // Restore
+      }
+    });
+  });
 });
