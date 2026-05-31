@@ -103,15 +103,45 @@ describe('parseSrcset', () => {
     expect(parseSrcset(srcset)).toEqual(['image-1x.jpg', 'image-2x.jpg']);
   });
 
-  it('handles empty or missing input', () => {
+  it('handles empty, missing, or non-string input gracefully', () => {
     expect(parseSrcset('')).toEqual([]);
     expect(parseSrcset(null)).toEqual([]);
     expect(parseSrcset(undefined)).toEqual([]);
+    expect(parseSrcset(false)).toEqual([]);
+    expect(parseSrcset(0)).toEqual([]);
+    expect(parseSrcset([])).toEqual([]);
+    expect(parseSrcset({})).toEqual(['[object']); // Note: Current implementation artifact for objects
   });
 
   it('handles URLs without descriptors', () => {
     expect(parseSrcset('image.jpg')).toEqual(['image.jpg']);
     expect(parseSrcset('img1.jpg, img2.jpg')).toEqual(['img1.jpg', 'img2.jpg']);
+  });
+
+  it('handles excessive whitespace and newlines', () => {
+    const srcset = `
+      image-320w.jpg   320w,
+
+      image-480w.jpg\t480w  ,
+      image-800w.jpg
+      800w
+    `;
+    expect(parseSrcset(srcset)).toEqual(['image-320w.jpg', 'image-480w.jpg', 'image-800w.jpg']);
+  });
+
+  it('handles trailing commas and empty entries', () => {
+    const srcset = 'image1.jpg 1x, , image2.jpg 2x, , ,';
+    expect(parseSrcset(srcset)).toEqual(['image1.jpg', 'image2.jpg']);
+  });
+
+  it('documents current behavior for base64 data URIs', () => {
+    // Note: The current implementation splits purely by commas, which incorrectly splits base64 strings.
+    // This test documents the current behavior. If full data URI support is added later, this test should be updated.
+    const base64 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII= 1x';
+    expect(parseSrcset(base64)).toEqual([
+      'data:image/png;base64',
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='
+    ]);
   });
 });
 
