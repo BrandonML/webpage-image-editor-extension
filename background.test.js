@@ -3,6 +3,7 @@ const openMock = jest.fn();
 const sendMessageMock = jest.fn();
 const onClickedActionMock = jest.fn();
 const onClickedContextMenusMock = jest.fn();
+const onMessageMock = jest.fn();
 
 global.chrome = {
   sidePanel: {
@@ -26,7 +27,7 @@ global.chrome = {
       addListener: jest.fn(),
     },
     onMessage: {
-      addListener: jest.fn(),
+      addListener: onMessageMock,
     },
     sendMessage: sendMessageMock,
     lastError: undefined,
@@ -36,6 +37,7 @@ global.chrome = {
 // We need to capture the listeners added so we can trigger them in tests
 let actionClickListener;
 let contextMenuClickListener;
+let messageListener;
 
 onClickedActionMock.mockImplementation((listener) => {
   actionClickListener = listener;
@@ -45,12 +47,28 @@ onClickedContextMenusMock.mockImplementation((listener) => {
   contextMenuClickListener = listener;
 });
 
+onMessageMock.mockImplementation((listener) => {
+  messageListener = listener;
+});
+
+global.fetch = jest.fn();
+global.btoa = jest.fn((str) => Buffer.from(str, 'binary').toString('base64'));
+
+// Prevent console.error from littering test output unless we're debugging
+const originalConsoleError = console.error;
+
 // Import the background script to initialize the listeners
 require('./background.js');
 
 describe('background.js', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    global.fetch.mockClear();
+    console.error = jest.fn();
+  });
+
+  afterAll(() => {
+    console.error = originalConsoleError;
   });
 
   it('should open side panel correctly for action click', async () => {
@@ -140,5 +158,105 @@ describe('background.js', () => {
 
     expect(setOptionsMock).not.toHaveBeenCalled();
     expect(openMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('FETCH_IMAGE_BORS_BYPASS handler', () => {
+  beforeEach(() => {
+    global.fetch.mockClear();
+    console.error = jest.fn();
+  });
+
+  it('should process https urls', async () => {
+    const sendResponseMock = jest.fn();
+    const mockBlob = {
+      type: 'image/png',
+      arrayBuffer: jest.fn().mockResolvedValue(new ArrayBuffer(8))
+    };
+
+    global.fetch.mockResolvedValueOnce({
+      ok: true,
+      blob: jest.fn().mockResolvedValue(mockBlob)
+    });
+
+    const isAsync = messageListener(
+      { action: 'FETCH_IMAGE_BORS_BYPASS', url: 'https://example.com/image.png' },
+      {},
+      sendResponseMock
+    );
+
+    expect(isAsync).toBe(true);
+
+    // wait for async operations to complete
+    await new Promise(process.nextTick);
+    await new Promise(process.nextTick);
+    await new Promise(process.nextTick);
+
+    expect(global.fetch).toHaveBeenCalledWith('https://example.com/image.png', expect.any(Object));
+    expect(sendResponseMock).toHaveBeenCalledWith(expect.objectContaining({ ok: true }));
+  });
+
+  it('should process http urls', async () => {
+    const sendResponseMock = jest.fn();
+    const mockBlob = {
+      type: 'image/jpeg',
+      arrayBuffer: jest.fn().mockResolvedValue(new ArrayBuffer(8))
+    };
+
+    global.fetch.mockResolvedValueOnce({
+      ok: true,
+      blob: jest.fn().mockResolvedValue(mockBlob)
+    });
+
+    messageListener(
+      { action: 'FETCH_IMAGE_BORS_BYPASS', url: 'http://example.com/image.jpg' },
+      {},
+      sendResponseMock
+    );
+
+    await new Promise(process.nextTick);
+    await new Promise(process.nextTick);
+    await new Promise(process.nextTick);
+
+    expect(global.fetch).toHaveBeenCalledWith('http://example.com/image.jpg', expect.any(Object));
+    expect(sendResponseMock).toHaveBeenCalledWith(expect.objectContaining({ ok: true }));
+  });
+
+  it('should reject non-http/https urls (file:)', async () => {
+    const sendResponseMock = jest.fn();
+
+    messageListener(
+      { action: 'FETCH_IMAGE_BORS_BYPASS', url: 'file:///etc/passwd' },
+      {},
+      sendResponseMock
+    );
+
+    await new Promise(process.nextTick);
+
+    expect(global.fetch).not.toHaveBeenCalled();
+    expect(sendResponseMock).toHaveBeenCalledWith({
+      ok: false,
+      error: 'Untrusted URL protocol. Only HTTP and HTTPS are allowed.'
+    });
+    expect(console.error).toHaveBeenCalledWith(expect.stringContaining('Security Error: Untrusted URL protocol'));
+  });
+
+  it('should reject invalid urls', async () => {
+    const sendResponseMock = jest.fn();
+
+    messageListener(
+      { action: 'FETCH_IMAGE_BORS_BYPASS', url: 'not-a-url' },
+      {},
+      sendResponseMock
+    );
+
+    await new Promise(process.nextTick);
+
+    expect(global.fetch).not.toHaveBeenCalled();
+    expect(sendResponseMock).toHaveBeenCalledWith({
+      ok: false,
+      error: 'Invalid URL provided.'
+    });
+    expect(console.error).toHaveBeenCalledWith(expect.stringContaining('Invalid URL provided:'));
   });
 });

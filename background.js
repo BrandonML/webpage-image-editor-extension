@@ -122,7 +122,22 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
   (async () => {
     try {
-      const response = await fetch(message.url, {
+      let parsedUrl;
+      try {
+        parsedUrl = new URL(message.url);
+      } catch (err) {
+        console.error(`Invalid URL provided: ${message.url}`);
+        sendResponse({ ok: false, error: 'Invalid URL provided.' });
+        return;
+      }
+
+      if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+        console.error(`Security Error: Untrusted URL protocol '${parsedUrl.protocol}' for URL: ${message.url}`);
+        sendResponse({ ok: false, error: 'Untrusted URL protocol. Only HTTP and HTTPS are allowed.' });
+        return;
+      }
+
+      const response = await fetch(parsedUrl.href, {
         credentials: 'omit',
         cache: 'force-cache'
       });
