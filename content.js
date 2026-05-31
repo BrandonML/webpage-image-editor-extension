@@ -257,3 +257,18 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   sendResponse({ ok: true, images: scanDomForImages() });
   return false;
 });
+
+// Export functions for testing
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = {
+    extractBackgroundUrls,
+    toAbsoluteUrl,
+    parseSrcset,
+    cleanImageUrl,
+    calculateAspectRatio,
+    isLargeEnough,
+    getElementDimensions,
+    extractFileType,
+    scanDomForImages
+  };
+}
