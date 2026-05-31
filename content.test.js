@@ -17,7 +17,9 @@ const {
   parseSrcset,
   cleanImageUrl,
   calculateAspectRatio,
-  extractFileType
+  extractFileType,
+  isLargeEnough,
+  getElementDimensions
 } = require('./content.js');
 
 describe('content.js', () => {
@@ -142,6 +144,98 @@ describe('toAbsoluteUrl', () => {
     expect(toAbsoluteUrl(123)).toBeNull();
     expect(toAbsoluteUrl('')).toBeNull();
     expect(toAbsoluteUrl('   ')).toBeNull();
+  });
+
+  it('trims whitespace from URLs', () => {
+    expect(toAbsoluteUrl('  https://example.com/image.jpg  ')).toBe('https://example.com/image.jpg');
+    expect(toAbsoluteUrl('\t/image.png\n')).toBe('https://example.com/image.png');
+  });
+
+  it('handles protocol-relative URLs', () => {
+    expect(toAbsoluteUrl('//other.com/image.jpg')).toBe('https://other.com/image.jpg');
+  });
+
+  it('handles URLs with query parameters and hash fragments', () => {
+    expect(toAbsoluteUrl('/image.jpg?w=100&h=200#section')).toBe('https://example.com/image.jpg?w=100&h=200#section');
+  });
+
+  it('rejects unparseable URLs and additional unsupported schemes', () => {
+    expect(toAbsoluteUrl('http://[123')).toBeNull(); // Unparseable URL
+    expect(toAbsoluteUrl('chrome-extension://abcdefg/image.jpg')).toBeNull();
+    expect(toAbsoluteUrl('file:///C:/image.jpg')).toBeNull();
+  });
+});
+
+describe('extractFileType', () => {
+  beforeEach(() => {
+    global.document = { baseURI: 'https://example.com' };
+  });
+
+  it('extracts extension from simple URLs', () => {
+    expect(extractFileType('https://example.com/image.png', 'https://example.com/image.png')).toBe('png');
+    expect(extractFileType('https://example.com/photo.JPEG', 'https://example.com/photo.JPEG')).toBe('jpg');
+    expect(extractFileType('https://example.com/icon.svg', 'https://example.com/icon.svg')).toBe('svg');
+    expect(extractFileType('https://example.com/pic.webp', 'https://example.com/pic.webp')).toBe('webp');
+  });
+
+  it('extracts extension from query format parameters', () => {
+    expect(extractFileType('https://example.com/image?format=webp', 'https://example.com/image?format=webp')).toBe('webp');
+    expect(extractFileType('https://example.com/image?fm=png', 'https://example.com/image?fm=png')).toBe('png');
+    expect(extractFileType('https://example.com/image?type=image/jpeg', 'https://example.com/image?type=image/jpeg')).toBe('jpg');
+  });
+
+  it('returns unknown for unidentifiable types', () => {
+    expect(extractFileType('https://example.com/image.txt', 'https://example.com/image.txt')).toBe('unknown');
+    expect(extractFileType('https://example.com/image', 'https://example.com/image')).toBe('unknown');
+    expect(extractFileType('data:image/png;base64,...', null)).toBe('unknown');
+  });
+
+  it('prefers cleaned URL if raw URL has no type', () => {
+    expect(extractFileType('https://example.com/image', 'https://example.com/image.png')).toBe('png');
+  });
+});
+
+describe('isLargeEnough', () => {
+  it('returns true when dimensions are >= MIN_IMAGE_SIZE (32)', () => {
+    expect(isLargeEnough({ getBoundingClientRect: () => ({ width: 32, height: 32 }) })).toBe(true);
+    expect(isLargeEnough({ getBoundingClientRect: () => ({}), naturalWidth: 100, naturalHeight: 100 })).toBe(true);
+  });
+
+  it('returns false when any dimension is < MIN_IMAGE_SIZE (32)', () => {
+    expect(isLargeEnough({ getBoundingClientRect: () => ({ width: 31, height: 100 }) })).toBe(false);
+    expect(isLargeEnough({ getBoundingClientRect: () => ({ width: 100, height: 10 }) })).toBe(false);
+  });
+});
+
+describe('getElementDimensions', () => {
+  it('prefers natural dimensions over bounding rect', () => {
+    const el = {
+      naturalWidth: 800,
+      naturalHeight: 600,
+      getBoundingClientRect: () => ({ width: 100, height: 100 })
+    };
+    expect(getElementDimensions(el)).toEqual({ width: 800, height: 600 });
+  });
+
+  it('falls back to bounding rect if natural dimensions are missing', () => {
+    const el = {
+      getBoundingClientRect: () => ({ width: 100, height: 100 })
+    };
+    expect(getElementDimensions(el)).toEqual({ width: 100, height: 100 });
+  });
+
+  it('falls back to client dimensions if bounding rect is missing', () => {
+    const el = {
+      getBoundingClientRect: () => ({}),
+      clientWidth: 200,
+      clientHeight: 200
+    };
+    expect(getElementDimensions(el)).toEqual({ width: 200, height: 200 });
+  });
+
+  it('returns 0 if no dimensions are found', () => {
+    const el = { getBoundingClientRect: () => ({}) };
+    expect(getElementDimensions(el)).toEqual({ width: 0, height: 0 });
   });
 });
 
